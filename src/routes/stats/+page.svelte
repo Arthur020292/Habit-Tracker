@@ -251,7 +251,7 @@
 </script>
 
 <svelte:head>
-	<title>Habit Tracker Stats</title>
+	<title>HabitMate Stats</title>
 	<meta name="description" content="Total, monthly, and weekly habit analytics." />
 </svelte:head>
 

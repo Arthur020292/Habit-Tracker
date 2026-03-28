@@ -40,7 +40,7 @@
 	}
 
 	function exportHabits() {
-		const filename = `habit-tracker-habits-${todayKey(new Date())}.json`;
+		const filename = `habitmate-habits-${todayKey(new Date())}.json`;
 		downloadJsonFile(filename, createHabitsBackup($habits));
 		setFeedback('success', 'Habits exported as JSON.');
 	}
@@ -100,8 +100,8 @@
 </script>
 
 <svelte:head>
-	<title>Habit Tracker Settings</title>
-	<meta name="description" content="Theme, week start, reminders, and local data controls for Habit Tracker." />
+	<title>HabitMate Settings</title>
+	<meta name="description" content="Theme, week start, reminders, and local data controls for HabitMate." />
 </svelte:head>
 
 <section class="space-y-4">

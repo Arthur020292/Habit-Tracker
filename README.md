@@ -1,4 +1,4 @@
-# Habit Tracker
+# HabitMate
 
 A mobile-first habit tracker built with SvelteKit, TypeScript, Tailwind CSS, and localStorage persistence.
 

@@ -55,7 +55,7 @@
 </script>
 
 <svelte:head>
-	<title>Habit Tracker</title>
+	<title>HabitMate</title>
 	<meta
 		name="description"
 		content="A calm, mobile-first habit tracker with local persistence, streak tracking, and weekly stats."
