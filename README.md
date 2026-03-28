@@ -51,3 +51,4 @@ http://localhost:5173
 
 - Data is stored in `localStorage`, so it persists across refreshes in the browser.
 - The app is client-rendered to keep the local storage flow simple and reliable.
+- For Cloudflare Pages, use the static build output from SvelteKit (`npm run build`) and keep the default output directory (`build`).
