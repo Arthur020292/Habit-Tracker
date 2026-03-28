@@ -1,9 +1,14 @@
+@import '@fontsource/manrope/400.css';
+@import '@fontsource/manrope/500.css';
+@import '@fontsource/manrope/600.css';
+@import '@fontsource/manrope/700.css';
+@import '@fontsource/manrope/800.css';
 @import 'tailwindcss';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-	font-family: ui-sans-serif, system-ui, sans-serif;
+	font-family: 'Manrope', system-ui, sans-serif;
 	color: #0f172a;
 	background:
 		radial-gradient(circle at top, rgba(172, 216, 189, 0.48), transparent 34%),

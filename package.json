@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@fontsource/manrope": "^5.2.8",
+    "@iconify-json/material-symbols": "^1.2.64",
     "@sveltejs/adapter-auto": "^5.0.0",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.16.0",
