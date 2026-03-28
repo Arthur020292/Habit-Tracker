@@ -16,6 +16,11 @@ export interface HabitTimeFilterOption {
 	label: string;
 }
 
+const habitStatsCache = new WeakMap<Habit, Map<string, HabitStats>>();
+const todaySummaryCache = new WeakMap<Habit[], Map<string, TodaySummary>>();
+const dateRangeProgressCache = new WeakMap<Habit[], Map<string, WeeklyDayProgress[]>>();
+const weekdayBreakdownCache = new WeakMap<Habit[], Map<string, WeeklyDayProgress[]>>();
+
 export function isHabitScheduledForDate(habit: Habit, date: Date): boolean {
 	const createdAt = fromDateKey(toDateKey(new Date(habit.createdAt)));
 	const currentDay = fromDateKey(toDateKey(date));
@@ -149,6 +154,46 @@ export function filterHabitsByTimeFilter(habits: Habit[], filter: HabitTimeFilte
 	return habits.filter((habit) => getHabitTimeFilter(habit.time) === filter);
 }
 
+function countEligibleAndCompletedForDate(habits: Habit[], date: Date): { eligible: number; completed: number } {
+	const dateKey = toDateKey(date);
+	let eligible = 0;
+	let completed = 0;
+
+	for (const habit of habits) {
+		if (!isHabitScheduledForDate(habit, date)) {
+			continue;
+		}
+
+		eligible += 1;
+		if (habit.completions[dateKey] === true) {
+			completed += 1;
+		}
+	}
+
+	return { eligible, completed };
+}
+
+function getCachedValue<K extends object, V>(
+	cache: WeakMap<K, Map<string, V>>,
+	key: K,
+	cacheKey: string,
+	compute: () => V
+): V {
+	const cacheBucket = cache.get(key);
+	if (cacheBucket?.has(cacheKey)) {
+		return cacheBucket.get(cacheKey) as V;
+	}
+
+	const nextValue = compute();
+	if (cacheBucket) {
+		cacheBucket.set(cacheKey, nextValue);
+	} else {
+		cache.set(key, new Map([[cacheKey, nextValue]]));
+	}
+
+	return nextValue;
+}
+
 function parseHabitTimeToMinutes(time: string): number {
 	const [hoursPart, minutesPart] = time.split(':');
 	const hours = Number(hoursPart);
@@ -177,44 +222,50 @@ export function getHabitStats(habit: Habit, endDate = new Date()): HabitStats {
 }
 
 export function getHabitStatsInRange(habit: Habit, startDate: Date, endDate = new Date()): HabitStats {
-	const scheduledDates = getScheduledDatesBetween(habit, startDate, endDate);
-	let currentStreak = 0;
-	let bestStreak = 0;
-	let runningStreak = 0;
-	let completedDays = 0;
+	const cacheKey = `${toDateKey(startDate)}|${toDateKey(endDate)}`;
 
-	for (const date of scheduledDates) {
-		const key = toDateKey(date);
-		const completed = habit.completions[key] === true;
+	return getCachedValue(habitStatsCache, habit, cacheKey, () => {
+		const scheduledDates = getScheduledDatesBetween(habit, startDate, endDate);
+		let bestStreak = 0;
+		let runningStreak = 0;
+		let currentStreak = 0;
+		let currentStreakLocked = false;
+		let completedDays = 0;
 
-		if (completed) {
-			completedDays += 1;
-			runningStreak += 1;
-			bestStreak = Math.max(bestStreak, runningStreak);
-		} else {
-			runningStreak = 0;
+		for (let index = scheduledDates.length - 1; index >= 0; index -= 1) {
+			const key = toDateKey(scheduledDates[index]);
+			const completed = habit.completions[key] === true;
+
+			if (completed) {
+				completedDays += 1;
+				runningStreak += 1;
+				bestStreak = Math.max(bestStreak, runningStreak);
+				if (!currentStreakLocked) {
+					currentStreak += 1;
+				}
+			} else {
+				if (!currentStreakLocked) {
+					currentStreakLocked = true;
+				}
+				runningStreak = 0;
+			}
 		}
-	}
 
-	for (let index = scheduledDates.length - 1; index >= 0; index -= 1) {
-		const key = toDateKey(scheduledDates[index]);
-		if (habit.completions[key] === true) {
-			currentStreak += 1;
-		} else {
-			break;
+		if (!currentStreakLocked) {
+			currentStreak = runningStreak;
 		}
-	}
 
-	const scheduledDays = scheduledDates.length;
-	const completionRate = scheduledDays === 0 ? 0 : Math.round((completedDays / scheduledDays) * 100);
+		const scheduledDays = scheduledDates.length;
+		const completionRate = scheduledDays === 0 ? 0 : Math.round((completedDays / scheduledDays) * 100);
 
-	return {
-		currentStreak,
-		bestStreak,
-		completionRate,
-		scheduledDays,
-		completedDays
-	};
+		return {
+			currentStreak,
+			bestStreak,
+			completionRate,
+			scheduledDays,
+			completedDays
+		};
+	});
 }
 
 export function getEarliestHabitCreatedAt(habits: Habit[], fallback = new Date()): Date {
@@ -248,19 +299,17 @@ export function getStatsRangeStartDate(
 }
 
 export function getTodaySummary(habits: Habit[], date = new Date()): TodaySummary {
-	const dateKey = toDateKey(date);
-	const total = habits.filter((habit) => isHabitScheduledForDate(habit, date)).length;
-	const completed = habits.filter(
-		(habit) => isHabitScheduledForDate(habit, date) && isHabitCompleteForDate(habit, dateKey)
-	).length;
-	const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+	return getCachedValue(todaySummaryCache, habits, toDateKey(date), () => {
+		const { eligible: total, completed } = countEligibleAndCompletedForDate(habits, date);
+		const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
 
-	return {
-		completed,
-		total,
-		percentage,
-		allComplete: total > 0 && completed === total
-	};
+		return {
+			completed,
+			total,
+			percentage,
+			allComplete: total > 0 && completed === total
+		};
+	});
 }
 
 export function getDateRangeProgress(
@@ -268,22 +317,23 @@ export function getDateRangeProgress(
 	startDate: Date,
 	endDate = new Date()
 ): WeeklyDayProgress[] {
-	const window = eachDateBetween(startDate, endDate);
+	const cacheKey = `${toDateKey(startDate)}|${toDateKey(endDate)}`;
 
-	return window.map((date) => {
-		const eligible = habits.filter((habit) => isHabitScheduledForDate(habit, date)).length;
-		const completed = habits.filter(
-			(habit) => isHabitScheduledForDate(habit, date) && isHabitCompleteForDate(habit, toDateKey(date))
-		).length;
+	return getCachedValue(dateRangeProgressCache, habits, cacheKey, () => {
+		const window = eachDateBetween(startDate, endDate);
 
-		return {
-			dateKey: toDateKey(date),
-			label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-			shortLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
-			completed,
-			eligible,
-			percentage: eligible === 0 ? 0 : Math.round((completed / eligible) * 100)
-		};
+		return window.map((date) => {
+			const { eligible, completed } = countEligibleAndCompletedForDate(habits, date);
+
+			return {
+				dateKey: toDateKey(date),
+				label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+				shortLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
+				completed,
+				eligible,
+				percentage: eligible === 0 ? 0 : Math.round((completed / eligible) * 100)
+			};
+		});
 	});
 }
 
@@ -313,33 +363,37 @@ export function getWeekdayBreakdown(
 	startDate: Date,
 	endDate = new Date()
 ): WeeklyDayProgress[] {
-	const totals = Array.from({ length: 7 }, (_, index) => ({
-		dateKey: `${index}`,
-		label: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][index],
-		shortLabel: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][index],
-		completed: 0,
-		eligible: 0,
-		percentage: 0
-	}));
+	const cacheKey = `${toDateKey(startDate)}|${toDateKey(endDate)}`;
 
-	for (const date of eachDateBetween(startDate, endDate)) {
-		const day = date.getDay();
-		for (const habit of habits) {
-			if (!isHabitScheduledForDate(habit, date)) {
-				continue;
-			}
+	return getCachedValue(weekdayBreakdownCache, habits, cacheKey, () => {
+		const totals = Array.from({ length: 7 }, (_, index) => ({
+			dateKey: `${index}`,
+			label: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][index],
+			shortLabel: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][index],
+			completed: 0,
+			eligible: 0,
+			percentage: 0
+		}));
 
-			totals[day].eligible += 1;
-			if (habit.completions[toDateKey(date)] === true) {
-				totals[day].completed += 1;
+		for (const date of eachDateBetween(startDate, endDate)) {
+			const day = date.getDay();
+			for (const habit of habits) {
+				if (!isHabitScheduledForDate(habit, date)) {
+					continue;
+				}
+
+				totals[day].eligible += 1;
+				if (habit.completions[toDateKey(date)] === true) {
+					totals[day].completed += 1;
+				}
 			}
 		}
-	}
 
-	return totals.map((day) => ({
-		...day,
-		percentage: day.eligible === 0 ? 0 : Math.round((day.completed / day.eligible) * 100)
-	}));
+		return totals.map((day) => ({
+			...day,
+			percentage: day.eligible === 0 ? 0 : Math.round((day.completed / day.eligible) * 100)
+		}));
+	});
 }
 
 export function getOverallCompletionRate(habits: Habit[], date = new Date()): number {

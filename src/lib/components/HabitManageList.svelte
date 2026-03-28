@@ -31,10 +31,7 @@
 {:else}
 	<div class="space-y-4">
 		{#each orderedHabits as habit (habit.id)}
-			<HabitManageCard
-				{habit}
-				on:edit={() => handleEdit(habit)}
-			/>
+			<HabitManageCard {habit} on:edit={() => handleEdit(habit)} />
 		{/each}
 	</div>
 {/if}

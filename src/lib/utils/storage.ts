@@ -16,18 +16,56 @@ export function readJson<T>(key: string, fallback: T): T {
 	}
 }
 
-export function writeJson<T>(key: string, value: T): void {
+export function writeJson<T>(key: string, value: T): boolean {
 	if (!browser) {
-		return;
+		return false;
 	}
 
-	localStorage.setItem(key, JSON.stringify(value));
+	try {
+		localStorage.setItem(key, JSON.stringify(value));
+		return true;
+	} catch {
+		return false;
+	}
 }
 
-export function removeItem(key: string): void {
+export function removeItem(key: string): boolean {
 	if (!browser) {
-		return;
+		return false;
 	}
 
-	localStorage.removeItem(key);
+	try {
+		localStorage.removeItem(key);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export function hasPersistentStorageSupport(): boolean {
+	return browser && typeof navigator !== 'undefined' && 'storage' in navigator && typeof navigator.storage.persist === 'function';
+}
+
+export async function isPersistentStorageEnabled(): Promise<boolean> {
+	if (!hasPersistentStorageSupport()) {
+		return false;
+	}
+
+	try {
+		return await navigator.storage.persisted();
+	} catch {
+		return false;
+	}
+}
+
+export async function requestPersistentStorage(): Promise<boolean> {
+	if (!hasPersistentStorageSupport()) {
+		return false;
+	}
+
+	try {
+		return await navigator.storage.persist();
+	} catch {
+		return false;
+	}
 }

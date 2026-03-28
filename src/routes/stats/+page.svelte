@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { habits } from '$lib/stores/habits';
 	import { settings } from '$lib/stores/settings';
+	import { stickyState } from '$lib/actions/sticky';
 	import MonthlyTrend from '$lib/components/MonthlyTrend.svelte';
-	import PeriodBars from '$lib/components/PeriodBars.svelte';
 	import StatsSummary from '$lib/components/StatsSummary.svelte';
 	import WeeklyProgress from '$lib/components/WeeklyProgress.svelte';
 	import {
@@ -11,11 +11,9 @@
 		getDateRangeProgress,
 		getHabitStats,
 		getHabitStatsInRange,
-		getStatsRangeStartDate,
 		getWeekdayBreakdown
 	} from '$lib/utils/habits';
-	import { fromDateKey } from '$lib/utils/date';
-	import type { Habit, HabitStats, StatsRange, WeeklyDayProgress } from '$lib/types';
+	import type { Habit, HabitStats, WeeklyDayProgress } from '$lib/types';
 
 	type HabitRow = {
 		habit: Habit;
@@ -23,101 +21,44 @@
 		allTimeStats: HabitStats;
 	};
 
-	type MonthBar = {
-		key: string;
-		label: string;
-		shortLabel: string;
-		completed: number;
-		eligible: number;
-		percentage: number;
-	};
-
-	const RANGE_OPTIONS: Array<{
-		value: StatsRange;
-		label: string;
-		description: string;
-	}> = [
-		{ value: 'total', label: 'Total', description: 'Lifetime trend' },
-		{ value: 'month', label: 'Monthly', description: 'Last 30 days' },
-		{ value: 'week', label: 'Weekly', description: 'This week' }
-	];
-
-	let selectedRange: StatsRange = 'month';
+	let monthOffset = 0;
 	let currentDate = new Date();
+	let isMonthToolbarStuck = false;
 
-	function getRangeMeta(range: StatsRange, weekStart: number) {
-		if (range === 'total') {
-			return {
-				title: 'All-time stats',
-				badge: 'Lifetime',
-				description: 'Your entire habit history, from the first logged habit to today.',
-				groupLabel: 'Lifetime timeline',
-				groupTitle: 'Monthly progress',
-				emptyMessage: 'Add habits to build a lifetime trend.',
-				completionLabel: 'Lifetime completion'
-			};
-		}
+	function getMonthWindow(referenceDate: Date, offset: number) {
+		const monthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + offset, 1);
+		monthStart.setHours(0, 0, 0, 0);
 
-		if (range === 'month') {
-			return {
-				title: 'Monthly stats',
-				badge: 'Last 30 days',
-				description: 'A trailing 30-day view of consistency, streaks, and completion patterns.',
-				groupLabel: '30-day pulse',
-				groupTitle: 'Daily trend',
-				emptyMessage: 'Add a few habits to see the last 30 days.',
-				completionLabel: '30-day completion'
-			};
-		}
+		const monthEnd =
+			offset === 0
+				? new Date(referenceDate)
+				: new Date(referenceDate.getFullYear(), referenceDate.getMonth() + offset + 1, 0);
+		monthEnd.setHours(23, 59, 59, 999);
 
 		return {
-			title: 'Weekly stats',
-			badge: weekStart === 1 ? 'Monday start' : 'Sunday start',
-			description: 'The current week so far, anchored to your selected week start.',
-			groupLabel: 'Current week',
-			groupTitle: 'Daily trend',
-			emptyMessage: 'Add a few habits to see this week.',
-			completionLabel: 'Weekly completion'
+			start: monthStart,
+			end: monthEnd
 		};
 	}
 
-	function buildMonthBars(days: WeeklyDayProgress[]): MonthBar[] {
-		const buckets = new Map<string, MonthBar>();
-
-		for (const day of days) {
-			const date = fromDateKey(day.dateKey);
-			const key = `${date.getFullYear()}-${date.getMonth()}`;
-			const label = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-			const shortLabel = date.toLocaleDateString('en-US', { month: 'short' });
-			const existing =
-				buckets.get(key) ?? {
-					key,
-					label,
-					shortLabel,
-					completed: 0,
-					eligible: 0,
-					percentage: 0
-				};
-
-			existing.completed += day.completed;
-			existing.eligible += day.eligible;
-			buckets.set(key, existing);
-		}
-
-		return Array.from(buckets.values()).map((bucket) => ({
-			...bucket,
-			percentage: bucket.eligible === 0 ? 0 : Math.round((bucket.completed / bucket.eligible) * 100)
-		}));
-	}
-
-	$: rangeStart = getStatsRangeStartDate($habits, selectedRange, currentDate, $settings.weekStart);
-	$: rangeMeta = getRangeMeta(selectedRange, $settings.weekStart);
-	$: rangeProgress = getDateRangeProgress($habits, rangeStart, currentDate);
+	$: monthWindow = getMonthWindow(currentDate, monthOffset);
+	$: monthLabel = monthWindow.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+	$: rangeMeta = {
+		title: monthLabel,
+		description: `A calendar-month view for ${monthLabel}.`,
+		groupLabel: 'Monthly snapshot',
+		groupTitle: 'Daily trend',
+		emptyMessage: `Add a few habits to see ${monthLabel.toLowerCase()}.`,
+		completionLabel: 'Monthly completion'
+	};
+	$: rangeStart = monthWindow.start;
+	$: rangeEnd = monthWindow.end;
+	$: rangeProgress = getDateRangeProgress($habits, rangeStart, rangeEnd);
 	$: rangeCompleted = rangeProgress.reduce((sum, day) => sum + day.completed, 0);
 	$: rangeEligible = rangeProgress.reduce((sum, day) => sum + day.eligible, 0);
 	$: rangeRate = rangeEligible === 0 ? 0 : Math.round((rangeCompleted / rangeEligible) * 100);
 	$: bestDay =
-		$habits.length === 0 || selectedRange === 'total' || rangeProgress.length === 0
+		$habits.length === 0 || rangeProgress.length === 0
 			? null
 			: rangeProgress.reduce((best, day) => {
 					if (day.percentage > best.percentage) {
@@ -136,7 +77,7 @@
 						return day;
 					}
 
-					return best;
+			return best;
 				});
 	$: habitRows = $habits.map((habit) => ({
 		habit,
@@ -158,67 +99,23 @@
 
 		return left.habit.name.localeCompare(right.habit.name);
 	});
-	$: currentStreakLeader = [...habitRows].sort((left, right) => {
-		if (right.allTimeStats.currentStreak !== left.allTimeStats.currentStreak) {
-			return right.allTimeStats.currentStreak - left.allTimeStats.currentStreak;
+	$: bestStreakLeader = habitRows.reduce<HabitRow | null>((best, row) => {
+		if (!best) {
+			return row;
 		}
 
-		if (right.allTimeStats.bestStreak !== left.allTimeStats.bestStreak) {
-			return right.allTimeStats.bestStreak - left.allTimeStats.bestStreak;
+		if (row.allTimeStats.bestStreak !== best.allTimeStats.bestStreak) {
+			return row.allTimeStats.bestStreak > best.allTimeStats.bestStreak ? row : best;
 		}
 
-		return left.habit.name.localeCompare(right.habit.name);
-	})[0];
-	$: bestStreakLeader = [...habitRows].sort((left, right) => {
-		if (right.allTimeStats.bestStreak !== left.allTimeStats.bestStreak) {
-			return right.allTimeStats.bestStreak - left.allTimeStats.bestStreak;
+		if (row.allTimeStats.currentStreak !== best.allTimeStats.currentStreak) {
+			return row.allTimeStats.currentStreak > best.allTimeStats.currentStreak ? row : best;
 		}
 
-		if (right.allTimeStats.currentStreak !== left.allTimeStats.currentStreak) {
-			return right.allTimeStats.currentStreak - left.allTimeStats.currentStreak;
-		}
-
-		return left.habit.name.localeCompare(right.habit.name);
-	})[0];
-	$: weekdayProgress = $habits.length === 0 ? [] : getWeekdayBreakdown($habits, rangeStart, currentDate);
-	$: bestWeekday = weekdayProgress.reduce(
-		(best, day) => {
-			if (day.percentage > best.percentage) {
-				return day;
-			}
-
-			if (day.percentage === best.percentage && day.completed > best.completed) {
-				return day;
-			}
-
-			if (
-				day.percentage === best.percentage &&
-				day.completed === best.completed &&
-				day.eligible > best.eligible
-			) {
-				return day;
-			}
-
-			return best;
-		},
-			{ dateKey: '0', label: 'Sunday', shortLabel: 'Sun', completed: 0, eligible: 0, percentage: 0 }
-		);
-	$: worstWeekday = weekdayProgress.reduce(
-		(worst, day) => {
-			if (day.percentage < worst.percentage) {
-				return day;
-			}
-
-			if (day.percentage === worst.percentage && day.eligible > worst.eligible) {
-				return day;
-			}
-
-			return worst;
-		},
-		{ dateKey: '0', label: 'Sunday', shortLabel: 'Sun', completed: 0, eligible: 0, percentage: 100 }
-	);
-	$: visualDays = $habits.length === 0 || selectedRange === 'total' ? [] : rangeProgress;
-	$: monthlyBars = $habits.length === 0 || selectedRange !== 'total' ? [] : buildMonthBars(rangeProgress);
+		return row.habit.name.localeCompare(best.habit.name) < 0 ? row : best;
+	}, null);
+	$: weekdayProgress = $habits.length === 0 ? [] : getWeekdayBreakdown($habits, rangeStart, rangeEnd);
+	$: visualDays = $habits.length === 0 ? [] : rangeProgress;
 	$: summaryCards = [
 		{
 			label: rangeMeta.completionLabel,
@@ -226,26 +123,11 @@
 			note: `${rangeCompleted} completed of ${rangeEligible} scheduled`
 		},
 		{
-			label: 'Top habit',
-			value: rankedHabits[0] ? rankedHabits[0].habit.name : 'No habits yet',
-			note: rankedHabits[0]
-				? `${rankedHabits[0].rangeStats.completionRate}% in the selected view`
-				: 'Add habits to start ranking them'
-		},
-		{
-			label: 'Current streak leader',
-			value: currentStreakLeader ? currentStreakLeader.habit.name : 'No habits yet',
-			note: currentStreakLeader
-				? `${currentStreakLeader.allTimeStats.currentStreak} day${currentStreakLeader.allTimeStats.currentStreak === 1 ? '' : 's'} in a row`
-				: 'Add habits to see streak leaders'
-		},
-		{
-			label: 'Best weekday',
-			value: bestWeekday.eligible > 0 ? bestWeekday.label : '—',
-			note:
-				bestWeekday.eligible > 0
-					? `${bestWeekday.percentage}% completion; weakest day is ${worstWeekday.label}`
-					: 'No weekday patterns yet'
+			label: 'Best streak',
+				value: bestStreakLeader ? bestStreakLeader.habit.name : 'No habits yet',
+				note: bestStreakLeader
+					? `${bestStreakLeader.allTimeStats.bestStreak} day${bestStreakLeader.allTimeStats.bestStreak === 1 ? '' : 's'} best`
+				: 'Add habits to track streaks'
 		}
 	];
 </script>
@@ -256,41 +138,69 @@
 </svelte:head>
 
 <section class="space-y-4">
-	<div class="flex flex-col gap-4">
-		<div class="flex items-end justify-between gap-4">
-			<div>
-				<p class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-					Analytics
-				</p>
-				<h1 class="mt-1 text-3xl font-extrabold">{rangeMeta.title}</h1>
-				<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-					{rangeMeta.description}
-				</p>
-			</div>
-			<a
-				href="/"
-				class="stats-tab hidden rounded-full px-4 py-3 text-sm font-semibold text-slate-600 dark:text-slate-300 md:inline-flex"
-			>
-				Back to Today
-			</a>
+	<div class="flex items-end justify-between gap-4">
+		<div>
+			<p class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+				Analytics
+			</p>
+			<h1 class="mt-1 text-3xl font-extrabold">{rangeMeta.title}</h1>
+			<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+				{rangeMeta.description}
+			</p>
 		</div>
+	<a
+		href="/"
+		class="green-glass-chip hidden rounded-full px-4 py-3 text-sm font-semibold text-slate-600 dark:text-slate-300 md:inline-flex"
+	>
+		Back to Today
+	</a>
+</div>
 
-		<div class="grid gap-2 sm:grid-cols-3">
-			{#each RANGE_OPTIONS as option}
+	<div
+		use:stickyState={{ offset: 12, onChange: (stuck) => (isMonthToolbarStuck = stuck) }}
+		class="sticky top-[calc(0.75rem+env(safe-area-inset-top))] z-20 -mx-4 px-4 py-2 md:static md:top-auto md:z-auto md:mx-0 md:px-0 md:py-0"
+	>
+		<div
+			class={`rounded-[1.5rem] p-2 transition-[background-color,border-color,box-shadow,backdrop-filter,transform] duration-200 ease-out ${
+				isMonthToolbarStuck
+					? 'green-glass-surface'
+					: 'stats-glass'
+			}`}
+		>
+			<div class="flex w-full items-center justify-between gap-3">
+				<div class="flex min-w-0 items-center gap-2">
+					<button
+						type="button"
+						class="green-glass-chip inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-700 dark:text-slate-200"
+						on:click={() => (monthOffset -= 1)}
+						aria-label="Previous month"
+					>
+						<span aria-hidden="true">‹</span>
+					</button>
+					<div class="min-w-0 px-1 text-base font-extrabold tracking-tight sm:px-2">{monthLabel}</div>
+					<button
+						type="button"
+						class="green-glass-chip inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-700 dark:text-slate-200"
+						on:click={() => (monthOffset += 1)}
+						aria-label="Next month"
+					>
+						<span aria-hidden="true">›</span>
+					</button>
+				</div>
 				<button
 					type="button"
-					class={`stats-tab rounded-[1.25rem] px-4 py-3 text-left transition ${
-						selectedRange === option.value
-							? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)] shadow-lg shadow-emerald-200/30'
-							: 'border-white/45 text-slate-700 dark:text-slate-300'
+					class={`green-glass-chip inline-flex h-11 shrink-0 items-center justify-center rounded-full px-4 text-sm font-semibold transition ${
+						monthOffset === 0
+							? 'cursor-default opacity-60 text-slate-700 dark:text-slate-300'
+							: 'text-slate-700 hover:brightness-105 dark:text-slate-300'
 					}`}
-					on:click={() => (selectedRange = option.value)}
-					aria-pressed={selectedRange === option.value}
+					on:click={() => (monthOffset = 0)}
+					aria-label="Back to current month"
+					disabled={monthOffset === 0}
 				>
-					<p class="text-sm font-bold">{option.label}</p>
-					<p class="mt-1 text-xs uppercase tracking-[0.18em] opacity-75">{option.description}</p>
+					Today
 				</button>
-			{/each}
+			</div>
 		</div>
 	</div>
 
@@ -303,7 +213,7 @@
 					</p>
 					<h2 class="mt-2 text-xl font-extrabold">Stats will come alive once you add habits.</h2>
 					<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-						Create a few habits and come back here to compare your total, monthly, and weekly patterns.
+						Create a few habits and come back here to compare your monthly trend and weekday patterns.
 					</p>
 				</div>
 				<a
@@ -318,27 +228,15 @@
 
 	<StatsSummary cards={summaryCards} />
 
-	{#if selectedRange === 'total'}
-		<PeriodBars
-			bars={monthlyBars}
-			badgeLabel={rangeMeta.badge}
-			eyebrow={rangeMeta.groupLabel}
-			title={rangeMeta.groupTitle}
-			emptyMessage={rangeMeta.emptyMessage}
-		/>
-	{:else}
-		<MonthlyTrend
-			days={visualDays}
-			badgeLabel={rangeMeta.badge}
-			eyebrow={rangeMeta.groupLabel}
-			title={rangeMeta.groupTitle}
-			emptyMessage={rangeMeta.emptyMessage}
-			completedDays={rangeCompleted}
-			eligibleDays={rangeEligible}
-			bestDayLabel={bestDay ? bestDay.label : '—'}
-			bestDayRate={bestDay ? bestDay.percentage : 0}
-		/>
-	{/if}
+	<MonthlyTrend
+		days={visualDays}
+		eyebrow={rangeMeta.groupLabel}
+		title={rangeMeta.groupTitle}
+		emptyMessage={rangeMeta.emptyMessage}
+		completedDays={rangeCompleted}
+		eligibleDays={rangeEligible}
+		bestDayLabel={bestDay ? bestDay.label : '—'}
+	/>
 
 	<WeeklyProgress
 		days={weekdayProgress}
@@ -353,7 +251,7 @@
 			<div>
 				<h2 class="text-xl font-extrabold">Ranked habits</h2>
 				<p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-					Sorted by the selected view, then by your current streaks.
+					Sorted by this month, then by your current streaks.
 				</p>
 			</div>
 			<p class="text-sm text-slate-500 dark:text-slate-400">
@@ -406,34 +304,38 @@
 							</div>
 						</div>
 
-						<div class="mt-4 h-2 overflow-hidden rounded-full bg-white/40 dark:bg-slate-950/50">
+						<div class="mt-4 h-3 overflow-hidden rounded-full border border-white/55 bg-slate-200/70 shadow-inner dark:border-slate-700/60 dark:bg-slate-950/55">
 							<div
-								class="h-full rounded-full bg-[var(--brand)] transition-all"
+								class="relative h-full rounded-full bg-[linear-gradient(90deg,var(--brand)_0%,var(--brand-strong)_100%)] shadow-[0_10px_20px_-10px_rgba(47,109,76,0.85)] transition-all"
 								style={`width:${item.rangeStats.completionRate}%`}
-							></div>
+							>
+								{#if item.rangeStats.completionRate > 0}
+									<span
+										class="absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[var(--brand)] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.18)] dark:bg-slate-100"
+										aria-hidden="true"
+									></span>
+								{/if}
+							</div>
 						</div>
 
-						<div class="mt-4 grid grid-cols-3 gap-3">
-							<div class="stats-chip rounded-3xl px-3 py-3">
+						<div class="mt-4 grid grid-cols-3 divide-x divide-[rgba(116,146,128,0.16)] overflow-hidden rounded-[1.25rem] dark:divide-[rgba(148,163,184,0.16)]">
+							<div class="px-3 py-3">
 								<p class="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
 									Selected
 								</p>
 								<p class="mt-2 text-xl font-extrabold">{item.rangeStats.currentStreak}</p>
 							</div>
-							<div class="stats-chip rounded-3xl px-3 py-3">
+							<div class="px-3 py-3">
 								<p class="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
 									Current
 								</p>
 								<p class="mt-2 text-xl font-extrabold">{item.allTimeStats.currentStreak}</p>
 							</div>
-							<div class="stats-chip rounded-3xl px-3 py-3">
+							<div class="px-3 py-3">
 								<p class="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
 									Best
 								</p>
 								<p class="mt-2 text-xl font-extrabold">{item.allTimeStats.bestStreak}</p>
-								<p class="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-									{item.rangeStats.completedDays}/{item.rangeStats.scheduledDays} in view
-								</p>
 							</div>
 						</div>
 					</div>

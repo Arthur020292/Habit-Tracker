@@ -151,21 +151,21 @@
 					</label>
 				</div>
 
-				<label class="block">
-					<span class="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-300">Frequency</span>
-					<div class="grid grid-cols-3 gap-2">
-						{#each ['daily', 'weekdays', 'custom'] as option}
-							<button
-								type="button"
-								class={`tap-target rounded-3xl px-3 py-3 text-sm font-semibold capitalize transition ${
-									frequencyType === option
-										? 'bg-[var(--brand)] text-[var(--brand-contrast)] shadow-md'
-										: 'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300'
-								}`}
-								on:click={() => (frequencyType = option as HabitFormValues['frequency']['type'])}
-							>
-								{option}
-							</button>
+					<label class="block">
+						<span class="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-300">Frequency</span>
+						<div class="grid grid-cols-3 gap-2">
+							{#each ['daily', 'weekdays', 'custom'] as option}
+								<button
+									type="button"
+									class={`choice-pill tap-target rounded-3xl px-3 py-3 text-sm font-semibold capitalize ${
+										frequencyType === option
+											? 'choice-pill-active'
+											: 'text-slate-600 dark:text-slate-300'
+									}`}
+									on:click={() => (frequencyType = option as HabitFormValues['frequency']['type'])}
+								>
+									{option}
+								</button>
 						{/each}
 					</div>
 				</label>
@@ -177,10 +177,10 @@
 							{#each WEEKDAY_LABELS as day}
 								<button
 									type="button"
-									class={`tap-target rounded-3xl px-2 py-3 text-sm font-semibold transition ${
+									class={`choice-pill tap-target rounded-3xl px-2 py-3 text-sm font-semibold ${
 										customDays.includes(day.day)
-											? 'bg-[var(--brand)] text-[var(--brand-contrast)]'
-											: 'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300'
+											? 'choice-pill-active'
+											: 'text-slate-600 dark:text-slate-300'
 									}`}
 									on:click={() => toggleDay(day.day)}
 								>
@@ -202,7 +202,7 @@
 				{#if mode === 'edit'}
 					<button
 						type="button"
-						class="tap-target rounded-3xl bg-rose-50 px-4 py-3 font-semibold text-rose-600 transition hover:bg-rose-100 dark:bg-rose-950/60 dark:text-rose-200 dark:hover:bg-rose-950 sm:flex-1"
+						class="tap-target rounded-3xl border border-rose-200 bg-rose-600 px-4 py-3 font-semibold text-white shadow-[0_16px_34px_-22px_rgba(225,29,72,0.75)] transition hover:bg-rose-700 dark:border-rose-500/30 dark:bg-rose-500 dark:text-white dark:hover:bg-rose-400 sm:flex-1"
 						on:click={handleDelete}
 					>
 						Delete
@@ -210,7 +210,7 @@
 				{/if}
 				<button
 					type="button"
-					class="tap-target rounded-3xl bg-slate-100 px-4 py-3 font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-1"
+					class="tap-target green-glass-chip rounded-3xl px-4 py-3 font-semibold text-slate-700 transition hover:brightness-105 dark:text-slate-200 sm:flex-1"
 					on:click={closeModal}
 				>
 					Cancel

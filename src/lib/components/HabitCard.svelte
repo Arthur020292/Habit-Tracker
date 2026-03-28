@@ -17,7 +17,7 @@
 
 <button
 	type="button"
-	class={`group animate-pop block w-full rounded-[1.75rem] border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 ${
+	class={`group block w-full rounded-[1.75rem] border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40 ${
 		completedToday
 			? 'border-transparent text-[var(--brand-contrast)] shadow-lg shadow-emerald-200/60 hover:-translate-y-0.5'
 			: 'glass-card hover:-translate-y-0.5 hover:shadow-lg'
