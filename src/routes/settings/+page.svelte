@@ -1,18 +1,31 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { habits } from '$lib/stores/habits';
 	import { settings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
-	import { createHabitsBackup, downloadJsonFile, parseHabitsBackup } from '$lib/utils/backup';
+	import {
+		MAX_BACKUP_FILE_BYTES,
+		createHabitsBackup,
+		downloadJsonFile,
+		parseHabitsBackup
+	} from '$lib/utils/backup';
 	import { todayKey } from '$lib/utils/date';
+	import {
+		hasPersistentStorageSupport,
+		isPersistentStorageEnabled,
+		requestPersistentStorage
+	} from '$lib/utils/storage';
 	import type { Habit } from '$lib/types';
 
 	let importInput: HTMLInputElement | null = null;
 	let dialogMode: 'import' | 'reset' | null = null;
 	let pendingImport: Habit[] | null = null;
 	let feedback: { tone: 'success' | 'error'; text: string } | null = null;
+	let storageProtectionSupported = false;
+	let storageProtectionEnabled = false;
+	let storageProtectionLoading = false;
 
 	const weekStartOptions = [
 		{ value: 0, label: 'Sunday' },
@@ -24,12 +37,12 @@
 		{ value: 'weekdays', label: 'Weekdays' }
 	] as const;
 
-	$: dialogTitle = dialogMode === 'reset' ? 'Reset all data?' : 'Import habits?';
+	$: dialogTitle = dialogMode === 'reset' ? 'Clear all data?' : 'Restore backup?';
 	$: dialogMessage =
 		dialogMode === 'reset'
 			? 'This will clear your habits, theme choice, reminder settings, and week-start preference on this device.'
-			: 'Importing will replace the current habits with the JSON file you selected.';
-	$: dialogConfirmLabel = dialogMode === 'reset' ? 'Reset' : 'Import';
+			: 'Restoring will replace the current habits with the backup file you selected.';
+	$: dialogConfirmLabel = dialogMode === 'reset' ? 'Clear' : 'Restore';
 
 	function setFeedback(tone: 'success' | 'error', text: string) {
 		feedback = { tone, text };
@@ -39,10 +52,31 @@
 		feedback = null;
 	}
 
+	async function refreshStorageProtectionStatus() {
+		storageProtectionSupported = hasPersistentStorageSupport();
+		storageProtectionEnabled = await isPersistentStorageEnabled();
+	}
+
+	async function protectThisDevice() {
+		clearFeedback();
+		storageProtectionLoading = true;
+		storageProtectionSupported = hasPersistentStorageSupport();
+		storageProtectionEnabled = await requestPersistentStorage();
+		storageProtectionLoading = false;
+
+		if (storageProtectionEnabled) {
+			setFeedback('success', 'Your browser is now trying to keep HabitMate data on this device.');
+		} else if (storageProtectionSupported) {
+			setFeedback('error', 'The browser did not grant persistent storage on this device.');
+		} else {
+			setFeedback('error', 'Your browser does not support persistent storage.');
+		}
+	}
+
 	function exportHabits() {
-		const filename = `habitmate-habits-${todayKey(new Date())}.json`;
+		const filename = `habitmate-backup-${todayKey(new Date())}.json`;
 		downloadJsonFile(filename, createHabitsBackup($habits));
-		setFeedback('success', 'Habits exported as JSON.');
+		setFeedback('success', 'Backup downloaded.');
 	}
 
 	function triggerImport() {
@@ -59,12 +93,18 @@
 			return;
 		}
 
+		if (file.size > MAX_BACKUP_FILE_BYTES) {
+			input.value = '';
+			setFeedback('error', 'That backup file is too large to import on this device.');
+			return;
+		}
+
 		const text = await file.text();
 		const importedHabits = parseHabitsBackup(text);
 		input.value = '';
 
 		if (!importedHabits) {
-			setFeedback('error', 'That file does not look like a valid habit export.');
+			setFeedback('error', 'That file does not look like a valid backup.');
 			return;
 		}
 
@@ -75,7 +115,7 @@
 		}
 
 		habits.replaceAll(importedHabits);
-		setFeedback('success', `Imported ${importedHabits.length} habit${importedHabits.length === 1 ? '' : 's'}.`);
+		setFeedback('success', `Restored ${importedHabits.length} habit${importedHabits.length === 1 ? '' : 's'} from backup.`);
 	}
 
 	function confirmDialog() {
@@ -86,7 +126,7 @@
 			setFeedback('success', 'All app data has been cleared.');
 		} else if (pendingImport) {
 			habits.replaceAll(pendingImport);
-			setFeedback('success', `Imported ${pendingImport.length} habit${pendingImport.length === 1 ? '' : 's'}.`);
+			setFeedback('success', `Restored ${pendingImport.length} habit${pendingImport.length === 1 ? '' : 's'} from backup.`);
 		}
 
 		dialogMode = null;
@@ -97,6 +137,10 @@
 		dialogMode = null;
 		pendingImport = null;
 	}
+
+	onMount(() => {
+		void refreshStorageProtectionStatus();
+	});
 </script>
 
 <svelte:head>
@@ -163,9 +207,9 @@
 			{#each weekStartOptions as option}
 				<button
 					type="button"
-					class={`settings-control tap-target rounded-3xl px-4 py-3 text-sm font-semibold transition ${
+					class={`choice-pill tap-target rounded-3xl px-4 py-3 text-sm font-semibold ${
 						$settings.weekStart === option.value
-							? 'settings-control-active'
+							? 'choice-pill-active'
 							: 'text-slate-600 dark:text-slate-300'
 					}`}
 					on:click={() => settings.setWeekStart(option.value)}
@@ -180,13 +224,65 @@
 		<div class="flex items-start justify-between gap-4">
 			<div>
 				<p class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+					Device data
+				</p>
+				<h2 class="mt-2 text-xl font-extrabold">Keep data on this device</h2>
+				<p class="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+					HabitMate stores everything locally. Asking the browser for persistent storage can help
+					prevent automatic cleanup on this device.
+				</p>
+			</div>
+			<div class="flex shrink-0 items-center gap-2">
+				<span
+					class={`rounded-full px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] ${
+						storageProtectionEnabled
+							? 'bg-[var(--brand-soft)] text-[var(--brand-strong)]'
+							: 'bg-white/70 text-slate-500 dark:bg-slate-900/70 dark:text-slate-400'
+					}`}
+				>
+					{storageProtectionEnabled ? 'Protected' : 'Local only'}
+				</span>
+			</div>
+		</div>
+
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+			<p class="text-sm leading-6 text-slate-500 dark:text-slate-400">
+				{#if storageProtectionEnabled}
+					This browser has persistent storage enabled for HabitMate.
+				{:else if storageProtectionSupported}
+					You can ask the browser to keep this app’s data around longer.
+				{:else}
+					This browser does not support persistent storage, so backups matter even more.
+				{/if}
+			</p>
+			<button
+				type="button"
+				class="settings-control tap-target rounded-3xl px-4 py-3 text-sm font-semibold text-slate-600 transition hover:brightness-105 dark:text-slate-300 sm:w-auto"
+				on:click={protectThisDevice}
+				disabled={storageProtectionLoading || storageProtectionEnabled || !storageProtectionSupported}
+			>
+				{#if storageProtectionLoading}
+					Checking...
+				{:else if storageProtectionEnabled}
+					Protected
+				{:else}
+					Protect this device
+				{/if}
+			</button>
+		</div>
+	</div>
+
+	<div class="settings-glass rounded-[1.75rem] p-5 space-y-4">
+		<div class="flex items-start justify-between gap-4">
+			<div>
+				<p class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
 					Reminders
 				</p>
 				<h2 class="mt-2 text-xl font-extrabold">Reminder preferences</h2>
-				<p class="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-					These values are saved locally for now, so you can shape reminders before notifications are built.
-				</p>
-			</div>
+			<p class="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+				These values are saved locally for now, so you can shape reminders before notifications are built.
+			</p>
+		</div>
 			<button
 				type="button"
 				class={`settings-control tap-target rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -218,9 +314,9 @@
 					{#each reminderCadenceOptions as option}
 						<button
 							type="button"
-							class={`settings-control tap-target rounded-3xl px-4 py-3 text-sm font-semibold transition ${
+							class={`choice-pill tap-target rounded-3xl px-4 py-3 text-sm font-semibold ${
 								$settings.reminders.cadence === option.value
-									? 'settings-control-active'
+									? 'choice-pill-active'
 									: 'text-slate-600 dark:text-slate-300'
 							}`}
 							on:click={() => settings.setReminderCadence(option.value)}
@@ -240,7 +336,7 @@
 			</p>
 			<h2 class="mt-2 text-xl font-extrabold">Backup and reset</h2>
 			<p class="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-				Export your habits as JSON, import them back later, or clear everything from this device.
+				Download a backup to keep a copy, restore it later, or clear everything from this device.
 			</p>
 		</div>
 
@@ -250,14 +346,14 @@
 				class="settings-control settings-control-active tap-target rounded-3xl px-4 py-3 font-semibold transition hover:brightness-105"
 				on:click={exportHabits}
 			>
-				Export JSON
+				Download backup
 			</button>
 			<button
 				type="button"
 				class="settings-control tap-target rounded-3xl px-4 py-3 font-semibold text-slate-600 dark:text-slate-300"
 				on:click={triggerImport}
 			>
-				Import JSON
+				Restore backup
 			</button>
 			<button
 				type="button"
@@ -267,7 +363,7 @@
 					dialogMode = 'reset';
 				}}
 			>
-				Reset all data
+				Clear all data
 			</button>
 		</div>
 

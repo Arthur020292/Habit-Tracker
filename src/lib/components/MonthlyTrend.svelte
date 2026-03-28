@@ -2,14 +2,13 @@
 	import type { WeeklyDayProgress } from '$lib/types';
 
 	export let days: WeeklyDayProgress[] = [];
-	export let badgeLabel = 'Last 30 days';
+	export let badgeLabel = '';
 	export let eyebrow = 'Trend';
 	export let title = 'Selected range';
 	export let emptyMessage = 'Add a few habits to start building a trend.';
 	export let completedDays = 0;
 	export let eligibleDays = 0;
 	export let bestDayLabel = '—';
-	export let bestDayRate = 0;
 
 	function getCellClass(percentage: number): string {
 		if (percentage === 0) {
@@ -43,9 +42,11 @@
 			</p>
 			<h2 class="mt-2 text-xl font-extrabold">{title}</h2>
 		</div>
-		<div class="stats-chip rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-[var(--brand-strong)]">
-			{badgeLabel}
-		</div>
+		{#if badgeLabel}
+			<div class="stats-chip rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-[var(--brand-strong)]">
+				{badgeLabel}
+			</div>
+		{/if}
 	</div>
 
 	{#if days.length === 0}
@@ -77,25 +78,24 @@
 			{/each}
 		</div>
 
-		<div class="mt-4 grid gap-3 sm:grid-cols-3">
-			<div class="stats-chip rounded-3xl px-4 py-3">
-				<p class="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+		<div class="mt-4 grid grid-cols-3 divide-x divide-[rgba(116,146,128,0.16)] dark:divide-[rgba(148,163,184,0.16)]">
+			<div class="min-w-0 px-2 py-1">
+				<p class="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
 					Completed
 				</p>
-				<p class="mt-2 text-xl font-extrabold">{completedDays}</p>
+				<p class="mt-1 text-[1.05rem] font-extrabold leading-tight">{completedDays}</p>
 			</div>
-			<div class="stats-chip rounded-3xl px-4 py-3">
-				<p class="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+			<div class="min-w-0 px-3 py-1">
+				<p class="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
 					Eligible
 				</p>
-				<p class="mt-2 text-xl font-extrabold">{eligibleDays}</p>
+				<p class="mt-1 text-[1.05rem] font-extrabold leading-tight">{eligibleDays}</p>
 			</div>
-			<div class="stats-chip rounded-3xl px-4 py-3">
-				<p class="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+			<div class="min-w-0 px-3 py-1 text-right">
+				<p class="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
 					Best day
 				</p>
-				<p class="mt-2 text-lg font-extrabold leading-tight">{bestDayLabel}</p>
-				<p class="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-400">{bestDayRate}%</p>
+				<p class="mt-1 truncate text-[1.05rem] font-extrabold leading-tight">{bestDayLabel}</p>
 			</div>
 		</div>
 	{/if}

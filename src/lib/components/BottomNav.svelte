@@ -31,15 +31,15 @@
 	aria-label="Primary"
 >
 	<div class="mx-auto w-fit max-w-[calc(100vw-2rem)] px-4">
-		<div class="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-white/50 bg-white/45 p-2 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-slate-950/35">
+		<div class="green-glass-surface pointer-events-auto inline-flex items-center gap-2 rounded-full p-2">
 			{#each navItems as item}
 				{@const active = currentPath === item.href}
 				<a
 					href={item.href}
 					class={`tap-target inline-flex h-12 shrink-0 items-center overflow-hidden rounded-full text-sm font-semibold transition-[width,padding,background-color,color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
 						active
-							? 'bg-[var(--brand)] text-[var(--brand-contrast)] shadow-[0_12px_28px_-14px_rgba(79,143,108,0.7)]'
-							: 'bg-white text-slate-900 shadow-[0_12px_24px_-16px_rgba(15,23,42,0.55)] hover:scale-[1.03]'
+							? 'bg-[var(--brand)] text-[var(--brand-contrast)] shadow-[0_12px_28px_-14px_rgba(47,109,76,0.58)]'
+							: 'green-glass-chip text-slate-900 hover:scale-[1.03] dark:text-slate-100'
 					}`}
 					style={`width: ${active ? 'auto' : '3rem'}; padding: ${active ? '0.625rem 0.875rem 0.625rem 0.75rem' : '0'}; justify-content: ${active ? 'flex-start' : 'center'};`}
 					aria-current={active ? 'page' : undefined}

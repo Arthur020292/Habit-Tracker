@@ -11,6 +11,7 @@ import { createSeedHabits } from '$lib/data/seedHabits';
 import type { Habit, HabitFormValues, Weekday } from '$lib/types';
 import { createHabitId, normalizeCustomDays, setHabitCompletion } from '$lib/utils/habits';
 import { readJson, removeItem, writeJson } from '$lib/utils/storage';
+import { storageNotice } from './storageNotice';
 
 function loadHabits(): Habit[] {
 	return readJson<Habit[]>(STORAGE_KEY, []).map((habit) => ({
@@ -27,9 +28,16 @@ function normalizeHabits(nextHabits: Habit[]): Habit[] {
 }
 
 function persistHabits(habits: Habit[]): void {
-	writeJson(STORAGE_KEY, habits);
-	writeJson(SEEDED_HABITS_KEY, true);
-	writeJson(SEEDED_HABITS_VERSION_KEY, SEEDED_HABITS_VERSION);
+	const habitsSaved = writeJson(STORAGE_KEY, habits);
+	const seededSaved = writeJson(SEEDED_HABITS_KEY, true);
+	const versionSaved = writeJson(SEEDED_HABITS_VERSION_KEY, SEEDED_HABITS_VERSION);
+
+	if (habitsSaved && seededSaved && versionSaved) {
+		storageNotice.clear();
+		return;
+	}
+
+	storageNotice.report('Habit changes could not be saved because the browser storage is full or blocked.');
 }
 
 function hasSeededDefaultHabits(): boolean {
@@ -183,11 +191,16 @@ function createHabitStore() {
 				persistHabits(normalized);
 			}
 		},
-		clear() {
-			set([]);
-			removeItem(STORAGE_KEY);
-		}
-	};
-}
+			clear() {
+				set([]);
+				if (removeItem(STORAGE_KEY)) {
+					storageNotice.clear();
+					return;
+				}
+
+				storageNotice.report('Habit data could not be removed because the browser storage is blocked.');
+			}
+		};
+	}
 
 export const habits = createHabitStore();

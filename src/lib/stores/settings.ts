@@ -3,6 +3,7 @@ import { writable } from 'svelte/store';
 import { DEFAULT_SETTINGS, SETTINGS_KEY } from '$lib/constants';
 import type { AppSettings, ReminderCadence, WeekStartDay } from '$lib/types';
 import { readJson, removeItem, writeJson } from '$lib/utils/storage';
+import { storageNotice } from './storageNotice';
 
 function loadSettings(): AppSettings {
 	const saved = readJson<Partial<AppSettings>>(SETTINGS_KEY, {});
@@ -19,7 +20,12 @@ function loadSettings(): AppSettings {
 }
 
 function persistSettings(settings: AppSettings): void {
-	writeJson(SETTINGS_KEY, settings);
+	if (writeJson(SETTINGS_KEY, settings)) {
+		storageNotice.clear();
+		return;
+	}
+
+	storageNotice.report('Settings could not be saved because the browser storage is full or blocked.');
 }
 
 function createSettingsStore() {
@@ -108,11 +114,16 @@ function createSettingsStore() {
 				return next;
 			});
 		},
-		reset() {
-			set(DEFAULT_SETTINGS);
-			removeItem(SETTINGS_KEY);
-		}
-	};
-}
+			reset() {
+				set(DEFAULT_SETTINGS);
+				if (removeItem(SETTINGS_KEY)) {
+					storageNotice.clear();
+					return;
+				}
+
+				storageNotice.report('Settings could not be cleared because the browser storage is blocked.');
+			}
+		};
+	}
 
 export const settings = createSettingsStore();

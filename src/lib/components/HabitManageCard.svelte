@@ -15,11 +15,11 @@
 </script>
 
 <article
-	class="glass-card group relative animate-pop overflow-hidden rounded-[1.75rem] p-4 transition hover:-translate-y-0.5 hover:border-[var(--brand)]/30 hover:bg-white/70 hover:shadow-xl dark:hover:bg-slate-900/80"
+	class="glass-card group relative overflow-hidden rounded-[1.75rem] p-4 transition hover:-translate-y-0.5 hover:border-[var(--brand)]/30 hover:bg-white/70 hover:shadow-xl dark:hover:bg-slate-900/80"
 >
 	<button
 		type="button"
-		class="absolute inset-0 z-0 cursor-pointer rounded-[1.75rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/30"
+		class="tap-target absolute inset-0 z-0 cursor-pointer rounded-[1.75rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/30"
 		aria-label={`Edit ${habit.name}`}
 		on:click={handleEdit}
 	></button>
